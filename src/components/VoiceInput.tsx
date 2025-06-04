@@ -9,6 +9,57 @@ interface VoiceInputProps {
   onRecordingChange: (recording: boolean) => void;
 }
 
+// Extend window interface for speech recognition
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+  
+  interface SpeechRecognition extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    start(): void;
+    stop(): void;
+    onresult: ((event: SpeechRecognitionEvent) => void) | null;
+    onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+    onend: (() => void) | null;
+  }
+  
+  interface SpeechRecognitionEvent {
+    resultIndex: number;
+    results: SpeechRecognitionResultList;
+  }
+  
+  interface SpeechRecognitionResultList {
+    length: number;
+    item(index: number): SpeechRecognitionResult;
+    [index: number]: SpeechRecognitionResult;
+  }
+  
+  interface SpeechRecognitionResult {
+    length: number;
+    item(index: number): SpeechRecognitionAlternative;
+    [index: number]: SpeechRecognitionAlternative;
+    isFinal: boolean;
+  }
+  
+  interface SpeechRecognitionAlternative {
+    transcript: string;
+    confidence: number;
+  }
+  
+  interface SpeechRecognitionErrorEvent {
+    error: string;
+  }
+  
+  const SpeechRecognition: {
+    prototype: SpeechRecognition;
+    new(): SpeechRecognition;
+  };
+}
+
 export const VoiceInput = ({ onTranscription, isRecording, onRecordingChange }: VoiceInputProps) => {
   const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -89,11 +140,3 @@ export const VoiceInput = ({ onTranscription, isRecording, onRecordingChange }: 
     </Button>
   );
 };
-
-// Extend window interface for speech recognition
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
