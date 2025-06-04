@@ -1,18 +1,14 @@
 
 import OpenAI from 'openai';
 
-// This will be replaced with proper API key management via Supabase secrets
-const getOpenAIClient = (apiKey: string) => {
-  return new OpenAI({
-    apiKey: apiKey,
-    dangerouslyAllowBrowser: true // Only for demo purposes
-  });
-};
+// Initialize OpenAI client with environment variable
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true // Only for demo purposes
+});
 
-export const analyzeSentiment = async (text: string, apiKey: string): Promise<string> => {
+export const analyzeSentiment = async (text: string): Promise<string> => {
   try {
-    const openai = getOpenAIClient(apiKey);
-    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -39,10 +35,8 @@ export const analyzeSentiment = async (text: string, apiKey: string): Promise<st
   }
 };
 
-export const autoCompleteText = async (partialText: string, apiKey: string): Promise<string> => {
+export const autoCompleteText = async (partialText: string): Promise<string> => {
   try {
-    const openai = getOpenAIClient(apiKey);
-    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -66,10 +60,8 @@ export const autoCompleteText = async (partialText: string, apiKey: string): Pro
   }
 };
 
-export const findRelatedMemories = async (memories: any[], currentMemory: any, apiKey: string): Promise<string[]> => {
+export const findRelatedMemories = async (memories: any[], currentMemory: any): Promise<string[]> => {
   try {
-    const openai = getOpenAIClient(apiKey);
-    
     const memoryTexts = memories.map(m => `${m.id}: ${m.title} - ${m.description}`).join('\n');
     
     const response = await openai.chat.completions.create({

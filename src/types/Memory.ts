@@ -1,14 +1,15 @@
-
 export interface Memory {
-  id: string;
+  id: number;
   title: string;
   description: string;
   emotion: string;
-  date: string;
   intensity: number;
   createdAt: Date;
-  position?: {
+  date: string;
+  audio?: string;
+  location?: {
     x: number;
+    y: number;
     z: number;
   };
   relatedMemories?: string[];

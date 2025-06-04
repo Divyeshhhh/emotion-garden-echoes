@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { VoiceInput } from './VoiceInput';
+
 import { zones } from '../data/zones';
 import { Memory } from '../types/Memory';
 import { analyzeSentiment, autoCompleteText } from '../services/aiService';
@@ -24,30 +24,17 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
     date: new Date().toISOString().split('T')[0],
     intensity: 5
   });
-  const [isRecording, setIsRecording] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isAutoCompleting, setIsAutoCompleting] = useState(false);
 
-  const handleVoiceTranscription = (text: string) => {
-    setFormData(prev => ({
-      ...prev,
-      description: prev.description + (prev.description ? ' ' : '') + text
-    }));
-  };
-
   const handleAutoSentiment = async () => {
-    if (!apiKey) {
-      setShowApiKeyInput(true);
-      return;
-    }
-
     if (!formData.description) return;
 
     setIsAnalyzing(true);
     try {
-      const detectedEmotion = await analyzeSentiment(formData.description, apiKey);
+      const detectedEmotion = await analyzeSentiment(formData.description);
       setFormData(prev => ({ ...prev, emotion: detectedEmotion }));
     } catch (error) {
       console.error('Sentiment analysis failed:', error);
@@ -56,16 +43,11 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
   };
 
   const handleAutoComplete = async () => {
-    if (!apiKey) {
-      setShowApiKeyInput(true);
-      return;
-    }
-
     if (!formData.description) return;
 
     setIsAutoCompleting(true);
     try {
-      const completion = await autoCompleteText(formData.description, apiKey);
+      const completion = await autoCompleteText(formData.description);
       setFormData(prev => ({
         ...prev,
         description: prev.description + (completion ? ' ' + completion : '')
@@ -92,28 +74,6 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
           <CardTitle className="text-center">Plant a New Memory</CardTitle>
         </CardHeader>
         <CardContent>
-          {showApiKeyInput && (
-            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-sm text-yellow-800 mb-2">
-                Enter your OpenAI API key for AI features:
-              </p>
-              <Input
-                type="password"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="mb-2"
-              />
-              <Button
-                size="sm"
-                onClick={() => setShowApiKeyInput(false)}
-                disabled={!apiKey}
-              >
-                Save Key
-              </Button>
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Memory Title</label>
@@ -184,11 +144,6 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium">Description</label>
                 <div className="flex gap-1">
-                  <VoiceInput
-                    onTranscription={handleVoiceTranscription}
-                    isRecording={isRecording}
-                    onRecordingChange={setIsRecording}
-                  />
                   <Button
                     type="button"
                     variant="outline"

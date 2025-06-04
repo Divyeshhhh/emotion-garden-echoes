@@ -1,5 +1,17 @@
 
-export const zones = {
+export interface Zone {
+  name: string;
+  colors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    text: string;
+  };
+  treeType: string;
+  objects: string[];
+}
+
+export const zones: Record<string, Zone> = {
   joy: {
     name: 'Sunlight Grove',
     colors: {
@@ -87,5 +99,16 @@ export const zones = {
     },
     treeType: 'ancient_oak',
     objects: ['old_swings', 'vintage_clocks', 'photo_frames', 'autumn_leaves', 'memory_fragments', 'weathered_benches']
+  },
+  neutral: {
+    name: 'Whispering Pines',
+    colors: {
+      primary: '#8B9467',
+      secondary: '#6B8E23',
+      accent: '#98FB98',
+      text: '#333333'
+    },
+    treeType: 'evergreen',
+    objects: ['birds', 'rock_cairns', 'grass_fields', 'wooden_signs', 'memory_tags', 'neutral_stones', 'flying_birds']
   }
 };

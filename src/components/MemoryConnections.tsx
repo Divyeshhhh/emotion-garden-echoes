@@ -20,17 +20,17 @@ export const MemoryConnections = ({ memories, connections, scene }: MemoryConnec
     
     // Create connection lines
     Object.entries(connections).forEach(([memoryId, relatedIds]) => {
-      const memory = memories.find(m => m.id === memoryId);
-      if (!memory || !memory.position) return;
+      const memory = memories.find(m => m.id === parseInt(memoryId));
+      if (!memory || !memory.location) return;
 
       relatedIds.forEach(relatedId => {
-        const relatedMemory = memories.find(m => m.id === relatedId);
-        if (!relatedMemory || !relatedMemory.position) return;
+        const relatedMemory = memories.find(m => m.id === parseInt(relatedId));
+        if (!relatedMemory || !relatedMemory.location || !memory.location) return;
 
         // Create line geometry
         const points = [
-          new THREE.Vector3(memory.position.x, 2, memory.position.z),
-          new THREE.Vector3(relatedMemory.position.x, 2, relatedMemory.position.z)
+          new THREE.Vector3(memory.location?.x, 2, memory.location?.z),
+          new THREE.Vector3(relatedMemory.location?.x, 2, relatedMemory.location?.z)
         ];
         
         const geometry = new THREE.BufferGeometry().setFromPoints(points);

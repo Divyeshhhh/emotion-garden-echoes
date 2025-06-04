@@ -1,81 +1,132 @@
 import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { Memory } from '../types/Memory';
+import { zones } from '../data/zones';
 import { MemoryForm } from './MemoryForm';
 import { MemoryModal } from './MemoryModal';
-import { AudioManager } from './AudioManager';
 import { MemoryConnections } from './MemoryConnections';
-import { zones } from '../data/zones';
-import { Memory } from '../types/Memory';
+import { Garden3D } from './Garden3D';
 import { findRelatedMemories } from '../services/aiService';
 
-export const MemoryGarden = () => {
+interface Connection {
+  from: number;
+  to: number;
+  strength: number;
+}
+
+interface MemoryGardenProps {
+  memories: Memory[];
+  onAddMemory: (memory: Memory) => void;
+  selectedMemory: Memory | null;
+  onMemorySelect: (memory: Memory) => void;
+  currentZone: string;
+  onZoneChange: (zone: string) => void;
+  showConnections: boolean;
+  onToggleConnections: () => void;
+}
+
+export const MemoryGarden = ({
+  memories,
+  selectedMemory,
+  currentZone,
+  showConnections,
+  onAddMemory,
+  onMemorySelect,
+  onZoneChange,
+  onToggleConnections
+}: MemoryGardenProps) => {
+  const [showForm, setShowForm] = useState<boolean>(false);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene>();
-  const rendererRef = useRef<THREE.WebGLRenderer>();
-  const cameraRef = useRef<THREE.PerspectiveCamera>();
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
-  const [currentZone, setCurrentZone] = useState('joy');
+  const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
+  const cameraRef = useRef<THREE.PerspectiveCamera>(new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000));
+  const rendererRef = useRef<THREE.WebGLRenderer>(new THREE.WebGLRenderer({ antialias: true }));
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const mouseRef = useRef(new THREE.Vector2());
+  const keysRef = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [draggedTree, setDraggedTree] = useState<THREE.Object3D | null>(null);
-  const [connections, setConnections] = useState<{ [memoryId: string]: string[] }>({});
-  const [showConnections, setShowConnections] = useState(false);
-  
-  const mouseRef = useRef(new THREE.Vector2());
-  const raycasterRef = useRef(new THREE.Raycaster());
-  const keysRef = useRef<{[key: string]: boolean}>({});
+
+  const handleAddMemory = (memory: Memory) => {
+    onAddMemory(memory);
+  };
+
+  const handleZoneChange = (zone: string) => {
+    onZoneChange(zone);
+  };
 
   useEffect(() => {
-    if (!mountRef.current) return;
+    // Initialize scene
+    if (!sceneRef.current) {
+      sceneRef.current = new THREE.Scene();
+      sceneRef.current.background = new THREE.Color(0x87CEEB);
+    }
 
-    // Scene setup
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x87CEEB, 50, 200);
-    sceneRef.current = scene;
+    // Initialize camera
+    if (!cameraRef.current) {
+      cameraRef.current = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      cameraRef.current.position.z = 5;
+    }
 
-    // Camera setup
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 0);
-    cameraRef.current = camera;
+    // Initialize renderer
+    if (!rendererRef.current) {
+      rendererRef.current = new THREE.WebGLRenderer({ antialias: true });
+      rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+      mountRef.current?.appendChild(rendererRef.current.domElement);
+    }
 
-    // Renderer setup
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(0x87CEEB);
-    rendererRef.current = renderer;
-    mountRef.current.appendChild(renderer.domElement);
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(50, 50, 50);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    scene.add(directionalLight);
-
-    // Create zone grounds and environmental objects
-    createZoneGrounds(scene);
-    createZoneEnvironments(scene);
-
-    // Movement controls
     const handleKeyDown = (event: KeyboardEvent) => {
-      keysRef.current[event.code] = true;
-      if (event.code === 'KeyF') {
-        setShowForm(true);
-      }
-      if (event.code === 'KeyC') {
-        setShowConnections(prev => !prev);
+      switch (event.key) {
+        case 'ArrowUp':
+          keysRef.current.forward = true;
+          break;
+        case 'ArrowDown':
+          keysRef.current.backward = true;
+          break;
+        case 'ArrowLeft':
+          keysRef.current.left = true;
+          break;
+        case 'ArrowRight':
+          keysRef.current.right = true;
+          break;
+        case ' ':
+          keysRef.current.up = true;
+          break;
+        case 'Shift':
+          keysRef.current.down = true;
+          break;
       }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      keysRef.current[event.code] = false;
+      switch (event.key) {
+        case 'ArrowUp':
+          keysRef.current.forward = false;
+          break;
+        case 'ArrowDown':
+          keysRef.current.backward = false;
+          break;
+        case 'ArrowLeft':
+          keysRef.current.left = false;
+          break;
+        case 'ArrowRight':
+          keysRef.current.right = false;
+          break;
+        case ' ':
+          keysRef.current.up = false;
+          break;
+        case 'Shift':
+          keysRef.current.down = false;
+          break;
+      }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -85,9 +136,9 @@ export const MemoryGarden = () => {
 
     const handleMouseDown = (event: MouseEvent) => {
       if (event.button === 0) { // Left click
-        raycasterRef.current.setFromCamera(mouseRef.current, camera);
-        const intersects = raycasterRef.current.intersectObjects(scene.children, true);
-        
+        raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current!);
+        const intersects = raycasterRef.current.intersectObjects(sceneRef.current!.children, true);
+
         const treeIntersect = intersects.find(intersect => intersect.object.userData.isTree);
         if (treeIntersect) {
           if (event.shiftKey) {
@@ -98,7 +149,7 @@ export const MemoryGarden = () => {
             // View memory mode
             const memory = memories.find(m => m.id === treeIntersect.object.userData.memoryId);
             if (memory) {
-              setSelectedMemory(memory);
+              onMemorySelect(memory);
             }
           }
         }
@@ -106,18 +157,43 @@ export const MemoryGarden = () => {
     };
 
     const handleMouseUp = () => {
-      if (isDragging && draggedTree) {
-        // Update memory position
-        const memoryId = draggedTree.userData.memoryId;
-        setMemories(prev => prev.map(m => 
-          m.id === memoryId 
-            ? { ...m, position: { x: draggedTree.position.x, z: draggedTree.position.z } }
-            : m
-        ));
-      }
       setIsDragging(false);
       setDraggedTree(null);
     };
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+      
+      // Update camera position based on keys
+      if (cameraRef.current) {
+        const speed = 0.1;
+        if (keysRef.current.forward) cameraRef.current.position.z -= speed;
+        if (keysRef.current.backward) cameraRef.current.position.z += speed;
+        if (keysRef.current.left) cameraRef.current.position.x -= speed;
+        if (keysRef.current.right) cameraRef.current.position.x += speed;
+        if (keysRef.current.up) cameraRef.current.position.y += speed;
+        if (keysRef.current.down) cameraRef.current.position.y -= speed;
+      }
+
+      // Update dragged tree position
+      if (isDragging && draggedTree && sceneRef.current) {
+        raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current!);
+        const intersects = raycasterRef.current.intersectObjects([getGroundPlane(sceneRef.current)]);
+        if (intersects.length > 0) {
+          draggedTree.position.x = intersects[0].point.x;
+          draggedTree.position.z = intersects[0].point.z;
+        }
+      }
+
+      // Update zone effects
+      if (cameraRef.current && sceneRef.current) {
+        updateZoneEffects(cameraRef.current.position, sceneRef.current);
+        updateCurrentZone(cameraRef.current.position);
+      }
+
+      rendererRef.current?.render(sceneRef.current!, cameraRef.current!);
+    };
+    animate();
 
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
@@ -125,51 +201,17 @@ export const MemoryGarden = () => {
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mouseup', handleMouseUp);
 
-    // Animation loop
-    const animate = () => {
-      requestAnimationFrame(animate);
-      updateMovement(camera);
-      updateZoneEffects(camera.position, scene);
-      updateCurrentZone(camera.position);
-      
-      if (isDragging && draggedTree) {
-        raycasterRef.current.setFromCamera(mouseRef.current, camera);
-        const intersects = raycasterRef.current.intersectObjects([getGroundPlane(scene)]);
-        if (intersects.length > 0) {
-          draggedTree.position.x = intersects[0].point.x;
-          draggedTree.position.z = intersects[0].point.z;
-        }
-      }
-      
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    // Handle resize
-    const handleResize = () => {
-      if (camera && renderer) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('resize', handleResize);
-      if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement);
-      }
-      renderer.dispose();
+      rendererRef.current?.dispose();
+      sceneRef.current?.clear();
     };
-  }, []);
+  }, [memories]);
 
-  // Update trees when memories change
   useEffect(() => {
     if (!sceneRef.current) return;
     
@@ -185,13 +227,15 @@ export const MemoryGarden = () => {
   }, [memories]);
 
   const updateMovement = (camera: THREE.PerspectiveCamera) => {
-    const speed = 0.5;
+    const speed = 0.1;
     const direction = new THREE.Vector3();
     
-    if (keysRef.current['KeyW']) direction.z -= speed;
-    if (keysRef.current['KeyS']) direction.z += speed;
-    if (keysRef.current['KeyA']) direction.x -= speed;
-    if (keysRef.current['KeyD']) direction.x += speed;
+    if (keysRef.current.forward) direction.z -= speed;
+    if (keysRef.current.backward) direction.z += speed;
+    if (keysRef.current.left) direction.x -= speed;
+    if (keysRef.current.right) direction.x += speed;
+    if (keysRef.current.up) direction.y += speed;
+    if (keysRef.current.down) direction.y -= speed;
     
     direction.applyQuaternion(camera.quaternion);
     camera.position.add(direction);
@@ -203,15 +247,22 @@ export const MemoryGarden = () => {
   const updateCurrentZone = (position: THREE.Vector3) => {
     const newZone = determineZone(position);
     if (newZone !== currentZone) {
-      setCurrentZone(newZone);
+      onZoneChange(newZone);
+      // Update connections when zone changes
+      const newConnections = memories.map(memory => ({
+        from: memory.id,
+        to: memory.id,
+        strength: 0.5 // TODO: Implement zone-based connection strength
+      }));
+      setConnections(newConnections);
     }
   };
 
   const determineZone = (position: THREE.Vector3) => {
     // Simple zone detection based on position
-    const angle = Math.atan2(position.z, position.x);
-    const normalizedAngle = ((angle + Math.PI) / (2 * Math.PI)) * 8;
-    const zoneIndex = Math.floor(normalizedAngle) % 8;
+    const angle = (Math.PI * 2) / Object.keys(zones).length;
+    const radius = 15;
+    const zoneIndex = Math.floor((Math.atan2(position.z, position.x) + Math.PI) / angle) % Object.keys(zones).length;
     return Object.keys(zones)[zoneIndex];
   };
 
@@ -432,8 +483,8 @@ export const MemoryGarden = () => {
     group.add(foliage);
     
     // Position
-    if (memory.position) {
-      group.position.set(memory.position.x, 0, memory.position.z);
+    if (memory.location) {
+      group.position.set(memory.location.x, 0, memory.location.z);
     } else {
       const angle = Math.random() * Math.PI * 2;
       const radius = 10 + Math.random() * 10;
@@ -456,8 +507,11 @@ export const MemoryGarden = () => {
     
     // Update clear color
     if (rendererRef.current) {
-      rendererRef.current.setClearColor(new THREE.Color(zone.colors.primary), 0.3);
+      (rendererRef.current as any).setClearColor(new THREE.Color(zone.colors.primary), 0.3);
     }
+
+    // Update AudioManager zone
+
   };
 
   const getGroundPlane = (scene: THREE.Scene) => {
@@ -477,29 +531,65 @@ export const MemoryGarden = () => {
     return plane;
   };
 
-  const addMemory = async (memoryData: Omit<Memory, 'id'>) => {
-    const newMemory: Memory = {
-      ...memoryData,
-      id: Date.now().toString(),
+  const addMemory = async (memory: Memory) => {
+    const newMemory = {
+      ...memory,
+      location: {
+        x: Math.random() * 20 - 10,
+        y: 0,
+        z: Math.random() * 20 - 10
+      }
+    };
+
+    const updatedMemories = [...memories, newMemory];
+    onAddMemory(newMemory);
+    
+    // Update the current memory with its location
+    const memoryWithLocation = {
+      ...newMemory,
+      location: {
+        x: newMemory.location?.x || 0,
+        y: newMemory.location?.y || 0,
+        z: newMemory.location?.z || 0
+      }
     };
     
-    const updatedMemories = [...memories, newMemory];
-    setMemories(updatedMemories);
+    // Find related memories using AI (if API key is available)
     
     // Find related memories using AI (if API key is available)
-    const apiKey = localStorage.getItem('openai_api_key');
-    if (apiKey && updatedMemories.length > 1) {
+    if (process.env.NEXT_PUBLIC_OPENAI_API_KEY) {
+      findRelatedMemories([newMemory], memories)
+        .then(relatedMemoryIds => {
+          const relatedMemories = memories.filter(memory => relatedMemoryIds.includes(memory.id.toString()));
+          const newConnections = relatedMemories.map((memory: Memory) => ({
+            from: newMemory.id,
+            to: memory.id,
+            strength: 0.5 // TODO: Implement connection strength calculation
+          }));
+          setConnections(prev => [...prev, ...newConnections]);
+        })
+        .catch(error => console.error('Error finding related memories:', error));
+    }
+
+    // Find related memories using AI (if API key is available)
+    if (updatedMemories.length > 1) {
       try {
-        const relatedIds = await findRelatedMemories(memories, newMemory, apiKey);
-        setConnections(prev => ({
-          ...prev,
-          [newMemory.id]: relatedIds
+        const relatedMemoryIds = await findRelatedMemories(memories, newMemory);
+        const relatedMemories = memories.filter(memory => relatedMemoryIds.includes(memory.id.toString()));
+        const newConnections = relatedMemories.map((memory: Memory) => ({
+          from: newMemory.id,
+          to: memory.id,
+          strength: 0.5
         }));
+        setConnections(prev => [...prev, ...newConnections]);
       } catch (error) {
         console.error('Failed to find related memories:', error);
       }
     }
-    
+
+    // Update audio based on current zone
+
+
     setShowForm(false);
   };
 
@@ -515,33 +605,32 @@ export const MemoryGarden = () => {
           <p className="text-sm mt-2">WASD to move • F to add memory • C to toggle connections</p>
           <p className="text-sm">Click tree to view • Shift+Click to drag</p>
           {showConnections && <p className="text-sm text-green-300">Mind-map connections: ON</p>}
-        </div>
-      </div>
-
-      <AudioManager currentZone={currentZone} />
-      
-      {/* Memory Connections Visualization */}
-      {showConnections && sceneRef.current && (
-        <MemoryConnections
-          memories={memories}
-          connections={connections}
-          scene={sceneRef.current}
-        />
-      )}
-      
-      {showForm && (
-        <MemoryForm
-          onSubmit={addMemory}
-          onClose={() => setShowForm(false)}
-        />
-      )}
-      
-      {selectedMemory && (
-        <MemoryModal
-          memory={selectedMemory}
-          onClose={() => setSelectedMemory(null)}
-        />
-      )}
     </div>
-  );
+  </div>
+  <div className="flex-none">
+    <MemoryForm
+      onSubmit={(memory: Omit<Memory, 'id'>) => {
+        onAddMemory(memory as Memory);
+        onMemorySelect(null);
+      }}
+      onClose={() => onMemorySelect(null)}
+    />
+  </div>
+  {selectedMemory && (
+    <MemoryModal
+      memory={selectedMemory}
+      onClose={() => {
+        onMemorySelect(null);
+      }}
+    />
+  )}
+  {showConnections && (
+    <MemoryConnections
+      memories={memories}
+      connections={{} as { [memoryId: string]: string[] }}
+      scene={sceneRef.current}
+    />
+  )}
+</div>
+);
 };
