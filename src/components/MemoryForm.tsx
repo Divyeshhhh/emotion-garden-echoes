@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { VoiceInput } from './VoiceInput';
 import { zones } from '../data/zones';
 import { Memory } from '../types/Memory';
+import { analyzeSentiment, autoCompleteText } from '../services/aiService';
+import { Wand2, Brain } from 'lucide-react';
 
 interface MemoryFormProps {
   onSubmit: (memory: Omit<Memory, 'id'>) => void;
@@ -21,6 +24,57 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
     date: new Date().toISOString().split('T')[0],
     intensity: 5
   });
+  const [isRecording, setIsRecording] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAutoCompleting, setIsAutoCompleting] = useState(false);
+
+  const handleVoiceTranscription = (text: string) => {
+    setFormData(prev => ({
+      ...prev,
+      description: prev.description + (prev.description ? ' ' : '') + text
+    }));
+  };
+
+  const handleAutoSentiment = async () => {
+    if (!apiKey) {
+      setShowApiKeyInput(true);
+      return;
+    }
+
+    if (!formData.description) return;
+
+    setIsAnalyzing(true);
+    try {
+      const detectedEmotion = await analyzeSentiment(formData.description, apiKey);
+      setFormData(prev => ({ ...prev, emotion: detectedEmotion }));
+    } catch (error) {
+      console.error('Sentiment analysis failed:', error);
+    }
+    setIsAnalyzing(false);
+  };
+
+  const handleAutoComplete = async () => {
+    if (!apiKey) {
+      setShowApiKeyInput(true);
+      return;
+    }
+
+    if (!formData.description) return;
+
+    setIsAutoCompleting(true);
+    try {
+      const completion = await autoCompleteText(formData.description, apiKey);
+      setFormData(prev => ({
+        ...prev,
+        description: prev.description + (completion ? ' ' + completion : '')
+      }));
+    } catch (error) {
+      console.error('Auto-completion failed:', error);
+    }
+    setIsAutoCompleting(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,11 +87,33 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
-      <Card className="w-full max-w-md mx-4">
+      <Card className="w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <CardHeader>
           <CardTitle className="text-center">Plant a New Memory</CardTitle>
         </CardHeader>
         <CardContent>
+          {showApiKeyInput && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-sm text-yellow-800 mb-2">
+                Enter your OpenAI API key for AI features:
+              </p>
+              <Input
+                type="password"
+                placeholder="sk-..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="mb-2"
+              />
+              <Button
+                size="sm"
+                onClick={() => setShowApiKeyInput(false)}
+                disabled={!apiKey}
+              >
+                Save Key
+              </Button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Memory Title</label>
@@ -61,21 +137,33 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
             
             <div>
               <label className="block text-sm font-medium mb-1">Emotion</label>
-              <Select
-                value={formData.emotion}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, emotion: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(zones).map(([key, zone]) => (
-                    <SelectItem key={key} value={key}>
-                      {zone.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select
+                  value={formData.emotion}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, emotion: value }))}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(zones).map(([key, zone]) => (
+                      <SelectItem key={key} value={key}>
+                        {zone.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAutoSentiment}
+                  disabled={isAnalyzing || !formData.description}
+                >
+                  <Brain className="w-4 h-4" />
+                  {isAnalyzing ? 'Analyzing...' : 'AI Detect'}
+                </Button>
+              </div>
             </div>
             
             <div>
@@ -93,7 +181,26 @@ export const MemoryForm = ({ onSubmit, onClose }: MemoryFormProps) => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium">Description</label>
+                <div className="flex gap-1">
+                  <VoiceInput
+                    onTranscription={handleVoiceTranscription}
+                    isRecording={isRecording}
+                    onRecordingChange={setIsRecording}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoComplete}
+                    disabled={isAutoCompleting || !formData.description}
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    {isAutoCompleting ? 'Completing...' : 'AI Complete'}
+                  </Button>
+                </div>
+              </div>
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}

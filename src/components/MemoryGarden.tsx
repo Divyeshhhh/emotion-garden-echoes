@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import { MemoryForm } from './MemoryForm';
 import { MemoryModal } from './MemoryModal';
 import { AudioManager } from './AudioManager';
+import { MemoryConnections } from './MemoryConnections';
 import { zones } from '../data/zones';
 import { Memory } from '../types/Memory';
+import { findRelatedMemories } from '../services/aiService';
 
 export const MemoryGarden = () => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -17,6 +19,8 @@ export const MemoryGarden = () => {
   const [currentZone, setCurrentZone] = useState('joy');
   const [isDragging, setIsDragging] = useState(false);
   const [draggedTree, setDraggedTree] = useState<THREE.Object3D | null>(null);
+  const [connections, setConnections] = useState<{ [memoryId: string]: string[] }>({});
+  const [showConnections, setShowConnections] = useState(false);
   
   const mouseRef = useRef(new THREE.Vector2());
   const raycasterRef = useRef(new THREE.Raycaster());
@@ -63,6 +67,9 @@ export const MemoryGarden = () => {
       keysRef.current[event.code] = true;
       if (event.code === 'KeyF') {
         setShowForm(true);
+      }
+      if (event.code === 'KeyC') {
+        setShowConnections(prev => !prev);
       }
     };
 
@@ -297,12 +304,29 @@ export const MemoryGarden = () => {
     return plane;
   };
 
-  const addMemory = (memoryData: Omit<Memory, 'id'>) => {
+  const addMemory = async (memoryData: Omit<Memory, 'id'>) => {
     const newMemory: Memory = {
       ...memoryData,
       id: Date.now().toString(),
     };
-    setMemories(prev => [...prev, newMemory]);
+    
+    const updatedMemories = [...memories, newMemory];
+    setMemories(updatedMemories);
+    
+    // Find related memories using AI (if API key is available)
+    const apiKey = localStorage.getItem('openai_api_key');
+    if (apiKey && updatedMemories.length > 1) {
+      try {
+        const relatedIds = await findRelatedMemories(memories, newMemory, apiKey);
+        setConnections(prev => ({
+          ...prev,
+          [newMemory.id]: relatedIds
+        }));
+      } catch (error) {
+        console.error('Failed to find related memories:', error);
+      }
+    }
+    
     setShowForm(false);
   };
 
@@ -313,14 +337,24 @@ export const MemoryGarden = () => {
       {/* UI Overlay */}
       <div className="absolute top-4 left-4 z-10 text-white">
         <div className="bg-black bg-opacity-50 p-4 rounded-lg">
-          <h2 className="text-xl font-bold mb-2">Memory Garden</h2>
+          <h2 className="text-xl font-bold mb-2">AI Memory Garden</h2>
           <p>Current Zone: <span className="capitalize text-yellow-300">{currentZone}</span></p>
-          <p className="text-sm mt-2">WASD to move • F to add memory</p>
+          <p className="text-sm mt-2">WASD to move • F to add memory • C to toggle connections</p>
           <p className="text-sm">Click tree to view • Shift+Click to drag</p>
+          {showConnections && <p className="text-sm text-green-300">Mind-map connections: ON</p>}
         </div>
       </div>
 
       <AudioManager currentZone={currentZone} />
+      
+      {/* Memory Connections Visualization */}
+      {showConnections && sceneRef.current && (
+        <MemoryConnections
+          memories={memories}
+          connections={connections}
+          scene={sceneRef.current}
+        />
+      )}
       
       {showForm && (
         <MemoryForm

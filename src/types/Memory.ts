@@ -11,4 +11,5 @@ export interface Memory {
     x: number;
     z: number;
   };
+  relatedMemories?: string[];
 }
